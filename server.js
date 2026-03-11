@@ -1,175 +1,342 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
-const path = require("path");
 
 const app = express();
-const PORT = process.env.PORT || 3000;
 
-// ---------- MIDDLEWARE ----------
-// Allow all origins (CORS fix)
-app.use(cors({ origin: "*" }));
+// ==============================
+// MIDDLEWARE
+// ==============================
+
+app.use(cors({
+    origin: "*"
+}));
+
 app.use(express.json());
 
-// ---------- MONGODB CONNECTION ----------
-// Make sure your MongoDB URL is correct and uses process.env.MONGO_URL for security
-mongoose.connect(process.env.MONGO_URL || "mongodb+srv://scurdtechs:sammy386@cluster0.winnqqu.mongodb.net/finbridge")
-    .then(() => console.log("✅ Connected to FinBridge Database"))
-    .catch(err => console.log("❌ Mongo Error:", err));
 
-// ---------- USER MODEL ----------
+// ==============================
+// DATABASE CONNECTION
+// ==============================
+
+mongoose.connect(process.env.MONGO_URL)
+
+.then(() => {
+    console.log("MongoDB Connected");
+})
+
+.catch((err) => {
+    console.log("Database Error:", err);
+});
+
+
+// ==============================
+// USER MODEL
+// ==============================
+
 const userSchema = new mongoose.Schema({
-    name: { type: String, required: true },
-    email: { type: String, unique: true, required: true },
-    phone: { type: String, unique: true, required: true },
-    password: { type: String, required: true },
-    balance: { type: Number, default: 0 }
+
+    name: String,
+
+    email: {
+        type: String,
+        unique: true
+    },
+
+    phone: {
+        type: String,
+        unique: true
+    },
+
+    password: String,
+
+    balance: {
+        type: Number,
+        default: 0
+    }
+
 });
 
 const User = mongoose.model("User", userSchema);
 
-// ---------- TRANSACTION MODEL ----------
+
+// ==============================
+// TRANSACTION MODEL
+// ==============================
+
 const transactionSchema = new mongoose.Schema({
+
     senderPhone: String,
+
     receiverPhone: String,
+
     amount: Number,
-    type: String,
-    date: { type: Date, default: Date.now }
+
+    date: {
+        type: Date,
+        default: Date.now
+    }
+
 });
 
 const Transaction = mongoose.model("Transaction", transactionSchema);
 
-// ---------- REGISTER ----------
+
+// ==============================
+// REGISTER USER
+// ==============================
+
 app.post("/api/users/register", async (req, res) => {
+
     try {
+
         const { name, email, phone, password } = req.body;
-        if (!name || !email || !phone || !password)
-            return res.status(400).json({ message: "Name, email, phone, and password are required" });
 
-        const existing = await User.findOne({ $or: [{ phone }, { email }] });
-        if (existing) {
-            if (existing.phone === phone) return res.status(400).json({ message: "Phone already exists" });
-            if (existing.email === email) return res.status(400).json({ message: "Email already exists" });
-        }
-
-        const newUser = new User({ name, email, phone, password });
-        await newUser.save();
-        res.json({ message: "User registered successfully!" });
-    } catch (err) {
-        console.error("Register error:", err);
-        if (err.code === 11000) {
-            if (err.keyPattern.phone) return res.status(400).json({ message: "Phone already exists" });
-            if (err.keyPattern.email) return res.status(400).json({ message: "Email already exists" });
-        }
-        res.status(500).json({ message: "Error registering user" });
-    }
-});
-
-// ---------- LOGIN ----------
-app.post("/api/users/login", async (req, res) => {
-    try {
-        const { phone, password } = req.body;
-        const user = await User.findOne({ phone });
-        if (!user || user.password !== password) return res.status(400).json({ message: "Invalid credentials" });
-
-        res.json({
-            message: `Login successful. Welcome back, ${user.name}!`,
-            token: user.phone,
-            phone: user.phone,
-            name: user.name
+        const existingUser = await User.findOne({
+            $or: [{ phone }, { email }]
         });
-    } catch (err) {
-        console.error("Login error:", err);
-        res.status(500).json({ message: "Server error" });
-    }
-});
 
-// ---------- AUTH MIDDLEWARE ----------
-const authMiddleware = async (req, res, next) => {
-    const token = req.headers.authorization;
-    if (!token) return res.status(401).json({ message: "Unauthorized" });
+        if (existingUser) {
+            return res.status(400).json({
+                message: "User already exists"
+            });
+        }
 
-    try {
-        const user = await User.findOne({ phone: token });
-        if (!user) return res.status(401).json({ message: "Unauthorized" });
-        req.user = user;
-        next();
-    } catch (err) {
-        res.status(500).json({ message: "Server error" });
-    }
-};
+        const user = new User({
+            name,
+            email,
+            phone,
+            password
+        });
 
-// ---------- GET WALLET BALANCE ----------
-app.get("/api/users/balance", authMiddleware, async (req, res) => {
-    try {
-        res.json({ balance: req.user.balance });
-    } catch (err) {
-        console.error("Balance error:", err);
-        res.status(500).json({ message: "Failed to get balance" });
-    }
-});
-
-// ---------- DEPOSIT ----------
-app.post("/api/deposit", authMiddleware, async (req, res) => {
-    try {
-        const { amount } = req.body;
-        if (!amount || amount <= 0) return res.status(400).json({ message: "Enter valid amount" });
-
-        const user = req.user;
-        user.balance += amount;
         await user.save();
 
-        const tx = new Transaction({ senderPhone: user.phone, receiverPhone: user.phone, amount, type: "deposit" });
-        await tx.save();
+        res.json({
+            message: "Registration successful"
+        });
 
-        res.json({ message: "Deposit successful!", balance: user.balance });
-    } catch (err) {
-        console.error("Deposit error:", err);
-        res.status(500).json({ message: "Deposit failed" });
+    } catch (error) {
+
+        res.status(500).json({
+            message: "Registration failed"
+        });
+
     }
+
 });
 
-// ---------- SEND MONEY ----------
-app.post("/api/send", authMiddleware, async (req, res) => {
+
+// ==============================
+// LOGIN
+// ==============================
+
+app.post("/api/users/login", async (req, res) => {
+
     try {
-        const { receiverPhone, amount } = req.body;
-        if (!amount || amount <= 0) return res.status(400).json({ message: "Enter valid amount" });
 
-        const sender = req.user;
-        if (sender.balance < amount) return res.status(400).json({ message: "Insufficient balance" });
+        const { phone, password } = req.body;
 
-        const receiver = await User.findOne({ phone: receiverPhone });
-        if (!receiver) return res.status(400).json({ message: "Receiver not found" });
+        const user = await User.findOne({ phone });
 
-        sender.balance -= amount;
-        receiver.balance += amount;
-        await sender.save();
-        await receiver.save();
+        if (!user || user.password !== password) {
 
-        const tx = new Transaction({ senderPhone: sender.phone, receiverPhone: receiver.phone, amount, type: "send" });
-        await tx.save();
+            return res.status(400).json({
+                message: "Invalid credentials"
+            });
 
-        res.json({ message: "Money sent successfully!", balance: sender.balance });
-    } catch (err) {
-        console.error("Send error:", err);
-        res.status(500).json({ message: "Transaction failed" });
+        }
+
+        res.json({
+
+            message: "Login successful",
+
+            token: user.phone,
+            name: user.name
+
+        });
+
+    } catch (error) {
+
+        res.status(500).json({
+            message: "Login failed"
+        });
+
     }
+
 });
 
-// ---------- TRANSACTIONS HISTORY ----------
-app.get("/api/transactions", authMiddleware, async (req, res) => {
-    try {
-        const phone = req.user.phone;
-        const txs = await Transaction.find({ $or: [{ senderPhone: phone }, { receiverPhone: phone }] }).sort({ date: -1 });
-        res.json(txs);
-    } catch (err) {
-        console.error("Transaction error:", err);
-        res.status(500).json({ message: "Failed to fetch transactions" });
+
+// ==============================
+// AUTH MIDDLEWARE
+// ==============================
+
+const auth = async (req, res, next) => {
+
+    const token = req.headers.authorization;
+
+    if (!token) {
+
+        return res.status(401).json({
+            message: "Unauthorized"
+        });
+
     }
+
+    const user = await User.findOne({
+        phone: token
+    });
+
+    if (!user) {
+
+        return res.status(401).json({
+            message: "Invalid token"
+        });
+
+    }
+
+    req.user = user;
+
+    next();
+
+};
+
+
+// ==============================
+// GET BALANCE
+// ==============================
+
+app.get("/api/users/balance", auth, (req, res) => {
+
+    res.json({
+        balance: req.user.balance
+    });
+
 });
 
-// ---------- SERVE FRONTEND (optional) ----------
-app.use(express.static(path.join(__dirname, "public")));
 
-// ---------- START SERVER ----------
-app.listen(PORT, () => console.log(`🚀 Server running at http://localhost:${PORT}`));
+// ==============================
+// DEPOSIT
+// ==============================
+
+app.post("/api/deposit", auth, async (req, res) => {
+
+    const { amount } = req.body;
+
+    req.user.balance += Number(amount);
+
+    await req.user.save();
+
+    const tx = new Transaction({
+
+        senderPhone: req.user.phone,
+        receiverPhone: req.user.phone,
+        amount
+
+    });
+
+    await tx.save();
+
+    res.json({
+        message: "Deposit successful"
+    });
+
+});
+
+
+// ==============================
+// SEND MONEY
+// ==============================
+
+app.post("/api/send", auth, async (req, res) => {
+
+    const { receiverPhone, amount } = req.body;
+
+    const sender = req.user;
+
+    if (sender.balance < amount) {
+
+        return res.status(400).json({
+            message: "Insufficient balance"
+        });
+
+    }
+
+    const receiver = await User.findOne({
+        phone: receiverPhone
+    });
+
+    if (!receiver) {
+
+        return res.status(404).json({
+            message: "Receiver not found"
+        });
+
+    }
+
+    sender.balance -= Number(amount);
+    receiver.balance += Number(amount);
+
+    await sender.save();
+    await receiver.save();
+
+    const tx = new Transaction({
+
+        senderPhone: sender.phone,
+        receiverPhone: receiver.phone,
+        amount
+
+    });
+
+    await tx.save();
+
+    res.json({
+        message: "Money sent successfully"
+    });
+
+});
+
+
+// ==============================
+// TRANSACTION HISTORY
+// ==============================
+
+app.get("/api/transactions", auth, async (req, res) => {
+
+    const phone = req.user.phone;
+
+    const tx = await Transaction.find({
+
+        $or: [
+            { senderPhone: phone },
+            { receiverPhone: phone }
+        ]
+
+    }).sort({ date: -1 });
+
+    res.json(tx);
+
+});
+
+
+// ==============================
+// DEFAULT ROUTE
+// ==============================
+
+app.get("/", (req, res) => {
+
+    res.send("FinBridge Backend Running");
+
+});
+
+
+// ==============================
+// SERVER
+// ==============================
+
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+
+    console.log("Server running on port " + PORT);
+
+});
