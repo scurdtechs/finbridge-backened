@@ -1,23 +1,27 @@
-// ---------- IMPORTS ----------
-require('dotenv').config();          // Load environment variables
-const express = require('express');  // Express server
-const mongoose = require('mongoose'); 
-const cors = require('cors');        
-const path = require('path');        
-const bcrypt = require('bcrypt');    
+// server.js – FinBridge Backend ready for Vercel
 
-// ---------- APP SETUP ----------
+// Load environment variables
+require('dotenv').config();
+
+const express = require("express");
+const mongoose = require("mongoose");
+const cors = require("cors");
+const path = require("path");
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ---------- MIDDLEWARE ----------
-app.use(cors({ origin: "*" }));  // Allow all origins for now
+app.use(cors());
 app.use(express.json());
 
 // ---------- MONGODB CONNECTION ----------
-mongoose.connect(process.env.MONGO_URI)
-    .then(() => console.log("✅ Connected to FinBridge Database"))
-    .catch(err => console.log("❌ Mongo Error:", err));
+mongoose.connect(process.env.MONGO_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true
+})
+.then(() => console.log("✅ Connected to FinBridge Database"))
+.catch(err => console.log("❌ Mongo Error:", err));
 
 // ---------- USER MODEL ----------
 const userSchema = new mongoose.Schema({
@@ -54,14 +58,16 @@ app.post("/api/users/register", async (req, res) => {
             if (existing.email === email) return res.status(400).json({ message: "Email already exists" });
         }
 
-        const hashedPassword = await bcrypt.hash(password, 10); // Hash password
-
-        const newUser = new User({ name, email, phone, password: hashedPassword });
+        const newUser = new User({ name, email, phone, password });
         await newUser.save();
 
         res.json({ message: "User registered successfully!" });
     } catch (err) {
         console.error("Register error:", err);
+        if (err.code === 11000) {
+            if (err.keyPattern.phone) return res.status(400).json({ message: "Phone already exists" });
+            if (err.keyPattern.email) return res.status(400).json({ message: "Email already exists" });
+        }
         res.status(500).json({ message: "Error registering user" });
     }
 });
@@ -71,10 +77,9 @@ app.post("/api/users/login", async (req, res) => {
     try {
         const { phone, password } = req.body;
         const user = await User.findOne({ phone });
-        if (!user) return res.status(400).json({ message: "Invalid credentials" });
 
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
+        if (!user || user.password !== password)
+            return res.status(400).json({ message: "Invalid credentials" });
 
         res.json({
             message: `Login successful. Welcome back, ${user.name}!`,
@@ -104,7 +109,7 @@ const authMiddleware = async (req, res, next) => {
     }
 };
 
-// ---------- GET BALANCE ----------
+// ---------- GET WALLET BALANCE ----------
 app.get("/api/users/balance", authMiddleware, async (req, res) => {
     try {
         res.json({ balance: req.user.balance });
@@ -118,7 +123,8 @@ app.get("/api/users/balance", authMiddleware, async (req, res) => {
 app.post("/api/deposit", authMiddleware, async (req, res) => {
     try {
         const { amount } = req.body;
-        if (!amount || amount <= 0) return res.status(400).json({ message: "Enter valid amount" });
+        if (!amount || amount <= 0)
+            return res.status(400).json({ message: "Enter valid amount" });
 
         const user = req.user;
         user.balance += amount;
@@ -143,17 +149,18 @@ app.post("/api/deposit", authMiddleware, async (req, res) => {
 app.post("/api/send", authMiddleware, async (req, res) => {
     try {
         const { receiverPhone, amount } = req.body;
-        if (!amount || amount <= 0) return res.status(400).json({ message: "Enter valid amount" });
+        if (!amount || amount <= 0)
+            return res.status(400).json({ message: "Enter valid amount" });
 
         const sender = req.user;
-        if (sender.balance < amount) return res.status(400).json({ message: "Insufficient balance" });
+        if (sender.balance < amount)
+            return res.status(400).json({ message: "Insufficient balance" });
 
         const receiver = await User.findOne({ phone: receiverPhone });
         if (!receiver) return res.status(400).json({ message: "Receiver not found" });
 
         sender.balance -= amount;
         receiver.balance += amount;
-
         await sender.save();
         await receiver.save();
 
@@ -184,7 +191,7 @@ app.get("/api/transactions", authMiddleware, async (req, res) => {
     }
 });
 
-// ---------- SERVE FRONTEND ----------
+// ---------- SERVE FRONTEND (optional) ----------
 app.use(express.static(path.join(__dirname, "public")));
 
 // ---------- START SERVER ----------
