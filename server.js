@@ -12,20 +12,32 @@ const app = express();
 // MIDDLEWARE
 // ==============================
 
+const defaultAllowedOrigins = [
+    "http://127.0.0.1:5500",
+    "http://localhost:5500",
+    "http://127.0.0.1:3000",
+    "http://localhost:3000",
+    "https://finbridge-fronted-6ru9.vercel.app"
+];
+
+const allowedOrigins = process.env.CLIENT_ORIGINS
+    ? process.env.CLIENT_ORIGINS.split(",").map(origin => origin.trim()).filter(Boolean)
+    : defaultAllowedOrigins;
+
 const corsOptions = {
-    origin: process.env.CLIENT_ORIGINS
-        ? process.env.CLIENT_ORIGINS.split(",").map(origin => origin.trim())
-        : [
-            "http://127.0.0.1:5500",
-            "http://localhost:5500",
-            "http://127.0.0.1:3000",
-            "http://localhost:3000"
-        ],
+    origin: (origin, callback) => {
+        // Allow non-browser requests (no Origin header) and same-origin
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.includes(origin)) return callback(null, true);
+        return callback(new Error(`CORS blocked for origin: ${origin}`));
+    },
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"]
+    allowedHeaders: ["Content-Type", "Authorization"],
+    optionsSuccessStatus: 204
 };
 
 app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 
 app.use(express.json());
 
