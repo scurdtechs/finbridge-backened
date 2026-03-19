@@ -12,11 +12,20 @@ const app = express();
 // MIDDLEWARE
 // ==============================
 
-app.use(cors({
-    origin: "https://finbridge-fronted-4qmw-2rih2aied-scurd142-glitchs-projects.vercel.app",
-    methods: ["GET","POST","PUT","DELETE","OPTIONS"],
-    allowedHeaders: ["Content-Type","Authorization"]
-}));
+const corsOptions = {
+    origin: process.env.CLIENT_ORIGINS
+        ? process.env.CLIENT_ORIGINS.split(",").map(origin => origin.trim())
+        : [
+            "http://127.0.0.1:5500",
+            "http://localhost:5500",
+            "http://127.0.0.1:3000",
+            "http://localhost:3000"
+        ],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"]
+};
+
+app.use(cors(corsOptions));
 
 app.use(express.json());
 
@@ -24,9 +33,19 @@ app.use(express.json());
 // DATABASE CONNECTION
 // ==============================
 
-mongoose.connect(process.env.MONGO_URI)
-.then(() => console.log("MongoDB Connected"))
-.catch(err => console.log("Database Error:", err));
+const mongoUri = process.env.MONGO_URI;
+
+if (!mongoUri) {
+    console.error("Database Error: MONGO_URI is not defined in environment variables.");
+    process.exit(1);
+}
+
+mongoose.connect(mongoUri)
+    .then(() => console.log("MongoDB Connected"))
+    .catch(err => {
+        console.error("Database Error:", err);
+        process.exit(1);
+    });
 
 // ==============================
 // USER MODEL
@@ -66,7 +85,6 @@ app.post("/api/users/register", async (req, res) => {
         const existingUser = await User.findOne({ $or: [{ phone }, { email }] });
         if (existingUser) return res.status(400).json({ message: "User already exists" });
 
-        // Hash the password before saving
         const hashedPassword = await bcrypt.hash(password, 10);
 
         const user = new User({ name, email, phone, password: hashedPassword });
@@ -74,6 +92,7 @@ app.post("/api/users/register", async (req, res) => {
 
         res.json({ message: "Registration successful" });
     } catch (error) {
+        console.error(error);
         res.status(500).json({ message: "Registration failed" });
     }
 });
@@ -89,15 +108,14 @@ app.post("/api/users/login", async (req, res) => {
 
         if (!user) return res.status(400).json({ message: "Invalid credentials" });
 
-        // Compare password with hashed version
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
 
-        // Generate JWT token
         const token = jwt.sign({ id: user._id, phone: user.phone }, process.env.JWT_SECRET, { expiresIn: "7d" });
 
         res.json({ message: "Login successful", token, name: user.name });
     } catch (error) {
+        console.error(error);
         res.status(500).json({ message: "Login failed" });
     }
 });
@@ -110,7 +128,7 @@ const auth = async (req, res, next) => {
     const authHeader = req.headers.authorization;
     if (!authHeader) return res.status(401).json({ message: "Unauthorized" });
 
-    const token = authHeader.split(" ")[1]; // Expect "Bearer <token>"
+    const token = authHeader.split(" ")[1];
 
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
@@ -125,16 +143,12 @@ const auth = async (req, res, next) => {
 };
 
 // ==============================
-// GET BALANCE
+// USER ROUTES
 // ==============================
 
 app.get("/api/users/balance", auth, (req, res) => {
     res.json({ balance: req.user.balance });
 });
-
-// ==============================
-// DEPOSIT
-// ==============================
 
 app.post("/api/deposit", auth, async (req, res) => {
     const { amount } = req.body;
@@ -146,14 +160,10 @@ app.post("/api/deposit", auth, async (req, res) => {
         receiverPhone: req.user.phone,
         amount
     });
-
     await tx.save();
+
     res.json({ message: "Deposit successful" });
 });
-
-// ==============================
-// SEND MONEY
-// ==============================
 
 app.post("/api/send", auth, async (req, res) => {
     const { receiverPhone, amount } = req.body;
@@ -175,14 +185,10 @@ app.post("/api/send", auth, async (req, res) => {
         receiverPhone: receiver.phone,
         amount
     });
-
     await tx.save();
+
     res.json({ message: "Money sent successfully" });
 });
-
-// ==============================
-// TRANSACTION HISTORY
-// ==============================
 
 app.get("/api/transactions", auth, async (req, res) => {
     const phone = req.user.phone;
@@ -205,4 +211,4 @@ app.get("/", (req, res) => res.send("FinBridge Backend Running"));
 // ==============================
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("Server running on port " + PORT));
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
