@@ -1,146 +1,213 @@
 const express = require("express");
 const router = express.Router();
-const bcrypt = require("bcrypt");
+const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const User = require("../models/User");
-const auth = require("../middleware/auth"); // Auth middleware using JWT
+const crypto = require("crypto");
+
+const User = require("../models/user");
+const { requireAuth } = require("../middleware/auth");
+
+function hashToken(token) {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+function signJwt(user) {
+  return jwt.sign(
+    { id: user._id, role: user.role },
+    process.env.JWT_SECRET,
+    { expiresIn: "7d" }
+  );
+}
 
 // ================= REGISTER =================
-router.post("/register", async (req, res) => {
-    try {
-        const { fullName, phone, password } = req.body;
+router.post("/users/register", async (req, res) => {
+  try {
+    const { name, fullName, email, phone, password } = req.body;
+    const resolvedName = (name || fullName || "").trim();
 
-        if (!fullName || !phone || !password)
-            return res.status(400).json({ message: "All fields are required" });
-
-        const existingUser = await User.findOne({ phone });
-        if (existingUser)
-            return res.status(400).json({ message: "Phone already registered" });
-
-        const hashedPassword = await bcrypt.hash(password, 10);
-
-        const user = new User({
-            fullName,
-            phone,
-            password: hashedPassword,
-            balance: 0,
-            transactions: []
-        });
-
-        await user.save();
-        res.status(201).json({ message: "User registered successfully" });
-
-    } catch (err) {
-        res.status(500).json({ error: err.message });
+    if (!resolvedName || !phone || !password) {
+      return res.status(400).json({ message: "Name, phone, and password are required" });
     }
+
+    const existingUser = await User.findOne({ phone });
+    if (existingUser) return res.status(400).json({ message: "Phone already registered" });
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = await User.create({
+      name: resolvedName,
+      email: email || undefined,
+      phone,
+      password: hashedPassword,
+      balance: 0,
+      role: "user",
+      isAdmin: false,
+    });
+
+    return res.status(201).json({
+      message: "User registered successfully",
+      user: { id: user._id, phone: user.phone, name: user.name, isAdmin: user.isAdmin },
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 // ================= LOGIN =================
-router.post("/login", async (req, res) => {
-    try {
-        const { phone, password } = req.body;
+router.post("/users/login", async (req, res) => {
+  try {
+    const { phone, password } = req.body;
+    if (!phone || !password) return res.status(400).json({ message: "Phone and password are required" });
 
-        const user = await User.findOne({ phone });
-        if (!user) return res.status(400).json({ message: "User not found" });
+    const user = await User.findOne({ phone }).select("+password");
+    if (!user) return res.status(400).json({ message: "User not found" });
 
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) return res.status(400).json({ message: "Incorrect password" });
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) return res.status(400).json({ message: "Incorrect password" });
 
-        const token = jwt.sign(
-            { id: user._id },
-            process.env.JWT_SECRET,
-            { expiresIn: "7d" }
-        );
-        res.json({ message: "Login successful", token, phone: user.phone, fullName: user.fullName });
-
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+    const token = signJwt(user);
+    return res.json({
+      message: "Login successful",
+      token,
+      user: { id: user._id, phone: user.phone, name: user.name, isAdmin: user.isAdmin, balance: user.balance, points: user.points },
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
 });
 
-// ================= VIEW BALANCE =================
-router.get("/balance", auth, async (req, res) => {
-    try {
-        const user = await User.findById(req.user.id);
-        res.json({ fullName: user.fullName, balance: user.balance });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+// ================= FORGOT PASSWORD (CONSOLE TOKEN) =================
+router.post("/users/forgot-password", async (req, res) => {
+  try {
+    const { phone, email } = req.body;
+    const query = phone ? { phone } : email ? { email } : null;
+    if (!query) return res.status(400).json({ message: "Provide phone or email" });
+
+    const user = await User.findOne(query);
+    // Avoid leaking whether a user exists
+    if (!user) return res.json({ message: "If an account exists, a reset token has been generated." });
+
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    const resetTokenHash = hashToken(resetToken);
+
+    user.resetPasswordTokenHash = resetTokenHash;
+    user.resetPasswordExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+    await user.save();
+
+    // Console-token approach (no SMTP dependency)
+    console.log(`[FinBridge] Password reset token for ${user.phone}: ${resetToken}`);
+
+    return res.json({ message: "Reset token generated. Check server console for the token." });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
 });
 
-// ================= TRANSACTION HISTORY =================
-router.get("/transactions", auth, async (req, res) => {
-    try {
-        const user = await User.findById(req.user.id);
-        res.json(user.transactions);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
+// ================= RESET PASSWORD =================
+router.post("/users/reset-password", async (req, res) => {
+  try {
+    const { phone, email, token, newPassword } = req.body;
+    const query = phone ? { phone } : email ? { email } : null;
+    if (!query) return res.status(400).json({ message: "Provide phone or email" });
+
+    if (!token || !newPassword) return res.status(400).json({ message: "Token and newPassword are required" });
+
+    const user = await User.findOne(query);
+    if (!user || !user.resetPasswordTokenHash || !user.resetPasswordExpires) {
+      return res.status(400).json({ message: "Invalid or expired token" });
     }
+
+    const isExpired = user.resetPasswordExpires.getTime() < Date.now();
+    if (isExpired) return res.status(400).json({ message: "Token expired" });
+
+    const providedHash = hashToken(token);
+    if (providedHash !== user.resetPasswordTokenHash) {
+      return res.status(400).json({ message: "Invalid token" });
+    }
+
+    user.password = await bcrypt.hash(newPassword, 10);
+    user.resetPasswordTokenHash = undefined;
+    user.resetPasswordExpires = undefined;
+    await user.save();
+
+    return res.json({ message: "Password updated successfully" });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
 });
 
-// ================= DEPOSIT =================
-router.post("/deposit", auth, async (req, res) => {
-    try {
-        const { amount } = req.body;
-        const money = Number(amount);
-        if (!money || money <= 0)
-            return res.status(400).json({ message: "Invalid amount" });
-
-        const user = await User.findById(req.user.id);
-        user.balance += money;
-
-        user.transactions.push({
-            type: "deposit",
-            amount: money,
-            date: new Date()
-        });
-
-        await user.save();
-        res.json({ message: "Deposit successful", balance: user.balance });
-
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+// ================= ME =================
+router.get("/users/me", requireAuth, async (req, res) => {
+  try {
+    const user = req.user;
+    return res.json({
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      balance: user.balance,
+      points: user.points,
+      isAdmin: user.isAdmin,
+      deviceHealth: user.deviceHealth,
+      interests: user.interests,
+      avatar: user.avatar,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
 });
 
-// ================= SEND MONEY =================
-router.post("/send", auth, async (req, res) => {
-    try {
-        const { receiverPhone, amount } = req.body;
-        const money = Number(amount);
+// ================= UPDATE PROFILE =================
+router.put("/users/profile", requireAuth, async (req, res) => {
+  try {
+    const user = req.user;
+    const { name, email, interests } = req.body;
 
-        const sender = await User.findById(req.user.id);
-        const receiver = await User.findOne({ phone: receiverPhone });
+    if (name !== undefined) user.name = String(name).trim();
+    if (email !== undefined) user.email = email ? String(email).trim().toLowerCase() : undefined;
+    if (interests !== undefined) user.interests = Array.isArray(interests) ? interests : [];
 
-        if (!receiver) return res.status(404).json({ message: "Receiver not found" });
-        if (!money || money <= 0) return res.status(400).json({ message: "Invalid amount" });
-        if (sender.balance < money) return res.status(400).json({ message: "Insufficient balance" });
+    await user.save();
+    return res.json({ message: "Profile updated", user: { id: user._id, name: user.name, email: user.email, interests: user.interests } });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
 
-        sender.balance -= money;
-        receiver.balance += money;
+// ================= AVATAR =================
+router.post("/users/avatar", requireAuth, async (req, res) => {
+  try {
+    const user = req.user;
+    const { avatar } = req.body;
+    if (avatar === undefined) return res.status(400).json({ message: "avatar is required" });
+    user.avatar = String(avatar);
+    await user.save();
+    return res.json({ message: "Avatar updated", avatar: user.avatar });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
 
-        sender.transactions.push({
-            type: "send",
-            amount: money,
-            to: receiver.phone,
-            date: new Date()
-        });
+// ================= DEVICE HEALTH REPORT =================
+router.post("/users/device-health", requireAuth, async (req, res) => {
+  try {
+    const user = req.user;
+    const { battery, storage, cpu, memory } = req.body;
 
-        receiver.transactions.push({
-            type: "received",
-            amount: money,
-            from: sender.phone,
-            date: new Date()
-        });
-
-        await sender.save();
-        await receiver.save();
-
-        res.json({ message: "Transfer successful", senderBalance: sender.balance });
-
-    } catch (err) {
-        res.status(500).json({ error: err.message });
+    if ([battery, storage, cpu, memory].every((v) => v === undefined)) {
+      return res.status(400).json({ message: "Provide battery/storage/cpu/memory" });
     }
+
+    if (battery !== undefined) user.deviceHealth.battery = Number(battery);
+    if (storage !== undefined) user.deviceHealth.storage = Number(storage);
+    if (cpu !== undefined) user.deviceHealth.cpu = Number(cpu);
+    if (memory !== undefined) user.deviceHealth.memory = Number(memory);
+    user.deviceHealth.lastReportedAt = new Date();
+
+    await user.save();
+    return res.json({ message: "Device health updated", deviceHealth: user.deviceHealth });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 module.exports = router;
