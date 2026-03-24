@@ -129,7 +129,9 @@ app.use((req, res) => {
 });
 
 // Export a request handler for Vercel.
-module.exports = app;
+module.exports = (req, res) => {
+  app(req, res);
+};
 
 // Local dev fallback (optional)
 if (require.main === module) {
