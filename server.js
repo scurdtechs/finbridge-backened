@@ -22,6 +22,12 @@ const aiRouter = require("./routes/ai");
 const adminRouter = require("./routes/admin");
 const offlineRouter = require("./routes/offline");
 const smartStudyRouter = require("./routes/smartstudy");
+const campusRouter = require("./routes/campus");
+const skillsRouter = require("./routes/skills");
+const labsRouter = require("./routes/labs");
+const arvrRouter = require("./routes/arvr");
+const gamificationRouter = require("./routes/gamification");
+const notificationsRouter = require("./routes/notifications");
 
 const app = express();
 app.disable("x-powered-by");
@@ -107,6 +113,12 @@ app.use("/api", aiRouter);
 app.use("/api", adminRouter);
 app.use("/api", offlineRouter);
 app.use("/api", smartStudyRouter);
+app.use("/api", campusRouter);
+app.use("/api", skillsRouter);
+app.use("/api", labsRouter);
+app.use("/api", arvrRouter);
+app.use("/api", notificationsRouter);
+app.use("/api", gamificationRouter);
 
 app.use((req, res) => {
   res.status(404).json({ message: "Not found" });
