@@ -95,6 +95,9 @@ app.use(async (req, res, next) => {
 
 app.get("/api/health", (req, res) => res.json({ status: "ok" }));
 
+// Handle favicon requests
+app.get("/favicon.ico", (req, res) => res.status(204).end());
+
 app.use("/api", usersRouter);
 app.use("/api", walletRouter);
 app.use("/api", loansRouter);
