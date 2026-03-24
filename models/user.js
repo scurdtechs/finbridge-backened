@@ -50,6 +50,11 @@ const userSchema = new mongoose.Schema(
       cpu: { type: Number, default: 0 },
       memory: { type: Number, default: 0 },
       lastReportedAt: { type: Date, default: Date.now },
+      securityScan: {
+        status: { type: String, default: "unknown" }, // passed/failed/unknown
+        findings: { type: String, default: "" },
+        scannedAt: { type: Date, default: null },
+      },
     },
 
     offlineFiles: { type: [offlineFileSchema], default: [] },
@@ -58,6 +63,21 @@ const userSchema = new mongoose.Schema(
     following: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }], default: [] },
 
     notifications: { type: [notificationSchema], default: [] },
+
+    badges: { type: [String], default: [] },
+
+    // Daily challenges the user has interacted with.
+    // We keep it simple: store completion per day & task type.
+    dailyChallenges: {
+      type: [
+        {
+          dateKey: { type: String, required: true, index: true }, // YYYY-MM-DD (UTC)
+          completedTasks: { type: [String], default: [] },
+          rewarded: { type: Boolean, default: false },
+        },
+      ],
+      default: [],
+    },
 
     libraryBookmarks: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: "LibraryMaterial" }], default: [] },
 
