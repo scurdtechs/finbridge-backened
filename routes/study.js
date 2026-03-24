@@ -6,6 +6,7 @@ const Course = require("../models/course");
 const Enrollment = require("../models/enrollment");
 const Quiz = require("../models/quiz");
 const Certificate = require("../models/certificate");
+const { addPoints } = require("../utils/gamification");
 
 // ================= COURSES LIST =================
 router.get("/study/courses", requireAuth, async (req, res) => {
@@ -44,6 +45,9 @@ router.post("/study/enroll/:courseId", requireAuth, async (req, res) => {
     completedLessons: 0,
     totalLessons: course.totalLessons || 0,
   });
+
+  addPoints(req.user, 15, { reason: "Enrolled in a course" });
+  await req.user.save();
 
   return res.status(201).json({ message: "Enrolled successfully", enrollment });
 });
@@ -126,6 +130,11 @@ router.post("/study/quizzes/:quizId/submit", requireAuth, async (req, res) => {
   enrollment.progressUpdatedAt = new Date();
   await enrollment.save();
 
+  // Reward quiz attempt
+  const quizReward = 10 + Math.max(0, Math.round(Number(score) / 10));
+  addPoints(req.user, quizReward, { reason: `Quiz submitted (+${quizReward})`, dailyTaskType: "complete_quiz" });
+  await req.user.save();
+
   // Auto-issue certificate when course is completed
   let certificate = await Certificate.findOne({ userId: req.user._id, courseId: quiz.courseId });
   if (!certificate && enrollment.totalLessons > 0 && enrollment.completedLessons >= enrollment.totalLessons) {
@@ -134,6 +143,10 @@ router.post("/study/quizzes/:quizId/submit", requireAuth, async (req, res) => {
       courseId: quiz.courseId,
       issuedDate: new Date(),
     });
+
+    // Course completion badge reward
+    addPoints(req.user, 50, { reason: "Certificate earned (course completion)" });
+    await req.user.save();
   }
 
   return res.json({ message: "Quiz submitted", score, enrollment, certificate: certificate || null });
@@ -175,6 +188,10 @@ router.post("/study/courses/:courseId/forum/posts", requireAuth, async (req, res
   });
 
   await course.save();
+
+  addPoints(req.user, 5, { reason: "Shared in course forum" });
+  await req.user.save();
+
   return res.status(201).json({ message: "Posted", posts: course.forumPosts });
 });
 

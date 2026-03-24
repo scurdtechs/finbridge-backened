@@ -4,6 +4,7 @@ const router = express.Router();
 const { requireAuth } = require("../middleware/auth");
 const User = require("../models/user");
 const Transaction = require("../models/transaction");
+const { addPoints } = require("../utils/gamification");
 
 function toMoney(n) {
   const v = Number(n);
@@ -44,6 +45,7 @@ router.post("/wallet/deposit", requireAuth, async (req, res) => {
   if (amount <= 0) return res.status(400).json({ message: "Invalid amount" });
 
   req.user.balance += amount;
+  addPoints(req.user, 5, { reason: `Deposit +${amount} KES` });
   await req.user.save();
 
   await Transaction.create({
@@ -93,6 +95,7 @@ router.post("/wallet/send", requireAuth, async (req, res) => {
 
     sender.balance -= amount;
     receiver.balance += amount;
+    addPoints(sender, 2, { reason: `Sent +${amount} KES` });
     await sender.save();
     await receiver.save();
 
@@ -167,6 +170,7 @@ router.post("/wallet/split", requireAuth, async (req, res) => {
 
     const sender = req.user;
     sender.balance -= total;
+    addPoints(sender, 3, { reason: `Split total +${total} KES` });
     await sender.save();
 
     for (const receiver of receivers) {
@@ -196,6 +200,7 @@ router.post("/wallet/tap-to-pay", requireAuth, async (req, res) => {
   if (req.user.balance < amount) return res.status(400).json({ message: "Insufficient balance" });
 
   req.user.balance -= amount;
+  addPoints(req.user, 2, { reason: `Tap-to-pay ${amount} KES` });
   await req.user.save();
 
   await Transaction.create({
@@ -216,6 +221,7 @@ router.post("/wallet/microtransactions", requireAuth, async (req, res) => {
   if (req.user.balance < amount) return res.status(400).json({ message: "Insufficient balance" });
 
   req.user.balance -= amount;
+  addPoints(req.user, 1, { reason: `Microtransaction ${amount} KES` });
   await req.user.save();
 
   await Transaction.create({

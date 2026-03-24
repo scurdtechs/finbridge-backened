@@ -6,6 +6,7 @@ const crypto = require("crypto");
 
 const User = require("../models/user");
 const { requireAuth } = require("../middleware/auth");
+const { addPoints } = require("../utils/gamification");
 
 function hashToken(token) {
   return crypto.createHash("sha256").update(token).digest("hex");
@@ -42,6 +43,10 @@ router.post("/users/register", async (req, res) => {
       role: "user",
       isAdmin: false,
     });
+
+    // Welcome points + initial badges
+    addPoints(user, 10, { reason: "Welcome to FinBridge" });
+    await user.save();
 
     return res.status(201).json({
       message: "User registered successfully",
@@ -129,6 +134,10 @@ router.post("/users/reset-password", async (req, res) => {
     user.resetPasswordExpires = undefined;
     await user.save();
 
+    // Small reward for completing security flow
+    addPoints(user, 5, { reason: "Password reset completed" });
+    await user.save();
+
     return res.json({ message: "Password updated successfully" });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -146,6 +155,7 @@ router.get("/users/me", requireAuth, async (req, res) => {
       phone: user.phone,
       balance: user.balance,
       points: user.points,
+      badges: user.badges || [],
       isAdmin: user.isAdmin,
       deviceHealth: user.deviceHealth,
       interests: user.interests,
@@ -204,7 +214,31 @@ router.post("/users/device-health", requireAuth, async (req, res) => {
     user.deviceHealth.lastReportedAt = new Date();
 
     await user.save();
+    addPoints(user, 2, { reason: "Device health reported" });
+    await user.save();
     return res.json({ message: "Device health updated", deviceHealth: user.deviceHealth });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ================= SECURITY SCAN =================
+router.post("/users/device-health/scan", requireAuth, async (req, res) => {
+  try {
+    const user = req.user;
+    // Simple heuristic / placeholder scan:
+    // If client sends `risk=true`, mark failed; otherwise pass.
+    const risk = req.body && (req.body.risk === true || req.body.risk === "true");
+    user.deviceHealth.securityScan.status = risk ? "failed" : "passed";
+    user.deviceHealth.securityScan.findings = risk
+      ? "Suspicious activity detected (placeholder scan)."
+      : "No suspicious activity detected (placeholder scan).";
+    user.deviceHealth.securityScan.scannedAt = new Date();
+
+    addPoints(user, 4, { reason: "Device security scan completed" });
+    await user.save();
+
+    return res.json({ message: "Security scan completed", securityScan: user.deviceHealth.securityScan });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

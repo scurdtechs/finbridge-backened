@@ -3,6 +3,7 @@ const router = express.Router();
 
 const { requireAuth } = require("../middleware/auth");
 const EntertainmentItem = require("../models/entertainmentitem");
+const { addPoints } = require("../utils/gamification");
 
 // ================= LIST =================
 router.get("/entertainment/items", requireAuth, async (req, res) => {
@@ -29,6 +30,9 @@ router.post("/entertainment/items", requireAuth, async (req, res) => {
       participants: ["gaming"].includes(String(category)) ? [req.user._id] : [],
     });
 
+    addPoints(req.user, 3, { reason: "Created entertainment item" });
+    await req.user.save();
+
     return res.status(201).json({ message: "Created", item });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -46,6 +50,8 @@ router.post("/entertainment/items/:id/like", requireAuth, async (req, res) => {
     else item.likes.push(req.user._id);
 
     await item.save();
+    addPoints(req.user, 1, { reason: "Liked entertainment item" });
+    await req.user.save();
     return res.json({ message: "Like updated", likesCount: item.likes.length });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -62,6 +68,8 @@ router.post("/entertainment/items/:id/join", requireAuth, async (req, res) => {
     const already = item.participants.some((id) => String(id) === String(req.user._id));
     if (!already) item.participants.push(req.user._id);
     await item.save();
+    addPoints(req.user, 4, { reason: "Joined a gaming challenge" });
+    await req.user.save();
     return res.json({ message: "Joined", participantsCount: item.participants.length });
   } catch (err) {
     return res.status(500).json({ error: err.message });

@@ -3,6 +3,8 @@ const router = express.Router();
 
 const { requireAuth, requireAdmin } = require("../middleware/auth");
 const Loan = require("../models/loan");
+const { addPoints } = require("../utils/gamification");
+const User = require("../models/user");
 
 // ================= REQUEST LOAN =================
 router.post("/loans/request", requireAuth, async (req, res) => {
@@ -24,6 +26,9 @@ router.post("/loans/request", requireAuth, async (req, res) => {
       dueDate: dueDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       penalties: 0,
     });
+
+    addPoints(req.user, 10, { reason: `Loan requested (${amount} KES)` });
+    await req.user.save();
 
     return res.status(201).json({ message: "Loan requested", loan });
   } catch (err) {
@@ -70,6 +75,9 @@ router.post("/loans/:loanId/repay", requireAuth, async (req, res) => {
       loan.status = "repaid";
     }
 
+    addPoints(req.user, 8, { reason: "Loan repayment recorded" });
+    await req.user.save();
+
     await loan.save();
     return res.json({ message: "Repayment recorded", loan });
   } catch (err) {
@@ -86,6 +94,15 @@ router.post("/admin/loans/:loanId/approve", requireAuth, requireAdmin, async (re
     loan.status = "approved";
     loan.dueDate = loan.dueDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     await loan.save();
+
+    // Reward borrower for an approved request
+    if (loan.userId) {
+      const borrower = await User.findById(loan.userId);
+      if (borrower) {
+        addPoints(borrower, 5, { reason: "Loan approved" });
+        await borrower.save();
+      }
+    }
 
     return res.json({ message: "Loan approved", loan });
   } catch (err) {

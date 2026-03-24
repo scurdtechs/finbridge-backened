@@ -6,6 +6,7 @@ const MarketItem = require("../models/marketitem");
 const MarketMessage = require("../models/marketmessage");
 const User = require("../models/user");
 const Transaction = require("../models/transaction");
+const { addPoints } = require("../utils/gamification");
 
 function toMoney(n) {
   const v = Number(n);
@@ -82,6 +83,7 @@ router.post("/market/items/:id/buy", requireAuth, async (req, res) => {
 
     buyer.balance -= amount;
     seller.balance += amount;
+    addPoints(buyer, 15, { reason: "Purchased from FinMarket" });
     await buyer.save();
     await seller.save();
 
@@ -128,6 +130,7 @@ router.post("/market/wishlist/:itemId", requireAuth, async (req, res) => {
   }
 
   req.user.marketWishlist.push(itemId);
+  addPoints(req.user, 2, { reason: "Added to FinMarket wishlist" });
   await req.user.save();
   return res.json({ message: "Added to wishlist" });
 });

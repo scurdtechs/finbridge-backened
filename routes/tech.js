@@ -5,6 +5,8 @@ const { requireAuth, requireAdmin } = require("../middleware/auth");
 const DeviceSharing = require("../models/devicesharing");
 const SmartLocker = require("../models/smartlocker");
 const ARVRRoom = require("../models/arvrroom");
+const { addPoints } = require("../utils/gamification");
+const User = require("../models/user");
 
 // ================= DEVICE SHARING =================
 router.post("/tech/device-sharing/request", requireAuth, async (req, res) => {
@@ -21,6 +23,9 @@ router.post("/tech/device-sharing/request", requireAuth, async (req, res) => {
       status: "requested",
       notes: req.body.notes ? String(req.body.notes) : "",
     });
+
+    addPoints(req.user, 3, { reason: "Requested device sharing" });
+    await req.user.save();
 
     return res.status(201).json({ message: "Request created", request });
   } catch (err) {
@@ -43,6 +48,15 @@ router.post("/tech/device-sharing/:id/approve", requireAuth, async (req, res) =>
 
     reqDoc.status = "accepted";
     await reqDoc.save();
+
+    // owner approves = reward borrower slightly (only if borrower exists)
+    if (reqDoc.borrower) {
+      const borrower = await User.findById(reqDoc.borrower);
+      if (borrower) {
+        addPoints(borrower, 2, { reason: "Device sharing approved" });
+        await borrower.save();
+      }
+    }
     return res.json({ message: "Approved", request: reqDoc });
   } catch (err) {
     return res.status(500).json({ error: err.message });

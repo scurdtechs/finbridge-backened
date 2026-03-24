@@ -7,6 +7,7 @@ const Habit = require("../models/habit");
 const FitnessLog = require("../models/fitnesslog");
 const HealthResource = require("../models/healthresource");
 const Reminder = require("../models/reminder");
+const { addPoints } = require("../utils/gamification");
 
 // ----------------- MOOD LOGS -----------------
 router.post("/health/moodlogs", requireAuth, async (req, res) => {
@@ -20,6 +21,9 @@ router.post("/health/moodlogs", requireAuth, async (req, res) => {
       date: date ? new Date(date) : new Date(),
       notes: notes ? String(notes) : "",
     });
+
+    addPoints(req.user, 3, { reason: "Logged mood", dailyTaskType: "log_mood" });
+    await req.user.save();
 
     return res.status(201).json({ message: "Mood logged", entry });
   } catch (err) {
@@ -46,6 +50,10 @@ router.post("/health/fitness", requireAuth, async (req, res) => {
       notes: notes ? String(notes) : "",
       date: date ? new Date(date) : new Date(),
     });
+
+    addPoints(req.user, 5, { reason: "Logged fitness" });
+    await req.user.save();
+
     return res.status(201).json({ message: "Fitness logged", entry });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -71,6 +79,9 @@ router.post("/health/habits", requireAuth, async (req, res) => {
       remindAt: remindAt ? new Date(remindAt) : undefined,
     });
 
+    addPoints(req.user, 3, { reason: "Created a habit" });
+    await req.user.save();
+
     return res.status(201).json({ message: "Habit created", habit });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -93,6 +104,10 @@ router.put("/health/habits/:habitId/progress", requireAuth, async (req, res) => 
     habit.lastUpdatedAt = new Date();
 
     await habit.save();
+
+    addPoints(req.user, 2, { reason: "Updated habit progress" });
+    await req.user.save();
+
     return res.json({ message: "Habit updated", habit });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -120,6 +135,9 @@ router.post("/health/reminders", requireAuth, async (req, res) => {
       message: message ? String(message) : "",
     });
 
+    addPoints(req.user, 2, { reason: "Created a reminder" });
+    await req.user.save();
+
     return res.status(201).json({ message: "Reminder created", reminder });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -139,6 +157,8 @@ router.post("/health/reminders/:id/mark-delivered", requireAuth, async (req, res
 
     reminder.delivered = true;
     await reminder.save();
+    addPoints(req.user, 1, { reason: "Marked reminder delivered" });
+    await req.user.save();
     return res.json({ message: "Marked delivered", reminder });
   } catch (err) {
     return res.status(500).json({ error: err.message });

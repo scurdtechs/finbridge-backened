@@ -4,6 +4,7 @@ const router = express.Router();
 const { requireAuth } = require("../middleware/auth");
 const FinGramPost = require("../models/fingrampost");
 const User = require("../models/user");
+const { addPoints } = require("../utils/gamification");
 
 function uniqHashtags(tags) {
   const set = new Set();
@@ -48,6 +49,9 @@ router.post("/social/posts", requireAuth, async (req, res) => {
       storyExpiresAt: storyExpiresAt ? new Date(storyExpiresAt) : undefined,
     });
 
+    addPoints(req.user, 5, { reason: "Created a FinGram post" });
+    await req.user.save();
+
     return res.status(201).json({ message: "Post created", post });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -64,6 +68,8 @@ router.post("/social/posts/:id/like", requireAuth, async (req, res) => {
   else post.likes.push(req.user._id);
 
   await post.save();
+  addPoints(req.user, 1, { reason: idx >= 0 ? "Removed like" : "Liked a post" });
+  await req.user.save();
   return res.json({ message: "Like updated", likesCount: post.likes.length, liked: idx < 0 });
 });
 
@@ -77,6 +83,8 @@ router.post("/social/posts/:id/comment", requireAuth, async (req, res) => {
 
   post.comments.push({ userId: req.user._id, comment: String(comment), createdAt: new Date() });
   await post.save();
+  addPoints(req.user, 2, { reason: "Commented on a post" });
+  await req.user.save();
   return res.status(201).json({ message: "Comment added", commentsCount: post.comments.length });
 });
 
@@ -94,6 +102,8 @@ router.post("/social/follow/:targetUserId", requireAuth, async (req, res) => {
     target.followers = target.followers.filter((id) => String(id) !== String(req.user._id));
     await req.user.save();
     await target.save();
+    addPoints(req.user, 0.5, { reason: "Unfollowed a user" });
+    await req.user.save();
     return res.json({ message: "Unfollowed" });
   }
 
@@ -101,6 +111,8 @@ router.post("/social/follow/:targetUserId", requireAuth, async (req, res) => {
   target.followers.push(req.user._id);
   await req.user.save();
   await target.save();
+  addPoints(req.user, 2, { reason: "Followed a user" });
+  await req.user.save();
   return res.json({ message: "Followed" });
 });
 

@@ -5,6 +5,7 @@ const { requireAuth, requireAdmin } = require("../middleware/auth");
 const Mentor = require("../models/mentor");
 const MentorshipRequest = require("../models/mentorshiprequest");
 const MentorMessage = require("../models/mentormessage");
+const { addPoints } = require("../utils/gamification");
 
 // ================= LIST MENTORS =================
 router.get("/mentorship/mentors", requireAuth, async (req, res) => {
@@ -32,6 +33,9 @@ router.post("/mentorship/requests/:mentorId/request-chat", requireAuth, async (r
       mentorId,
       status: "pending",
     });
+
+    addPoints(req.user, 5, { reason: "Requested mentorship chat" });
+    await req.user.save();
 
     return res.status(201).json({ message: "Chat requested", request });
   } catch (err) {
@@ -81,6 +85,9 @@ router.post("/mentorship/requests/:requestId/message", requireAuth, async (req, 
       content: String(content).trim(),
       fromMentor: false,
     });
+
+    addPoints(req.user, 2, { reason: "Sent mentorship message" });
+    await req.user.save();
 
     return res.status(201).json({ message: "Message sent", msg });
   } catch (err) {

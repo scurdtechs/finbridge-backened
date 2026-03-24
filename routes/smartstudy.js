@@ -3,6 +3,7 @@ const router = express.Router();
 
 const { requireAuth } = require("../middleware/auth");
 const SmartStudySession = require("../models/smartstudysession");
+const { addPoints } = require("../utils/gamification");
 
 // ================= FOCUS / POMODORO SESSIONS =================
 router.post("/smartstudy/sessions", requireAuth, async (req, res) => {
@@ -30,6 +31,10 @@ router.post("/smartstudy/sessions/:sessionId/complete", requireAuth, async (req,
 
     session.completedAt = new Date();
     await session.save();
+
+    addPoints(req.user, 10, { reason: "Completed a smart study session" });
+    await req.user.save();
+
     return res.json({ message: "Session completed", session });
   } catch (err) {
     return res.status(500).json({ error: err.message });

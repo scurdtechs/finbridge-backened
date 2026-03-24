@@ -4,6 +4,7 @@ const router = express.Router();
 const { requireAuth, requireAdmin } = require("../middleware/auth");
 const Group = require("../models/group");
 const Poll = require("../models/poll");
+const { addPoints } = require("../utils/gamification");
 
 // ================= CREATE GROUP =================
 router.post("/groups", requireAuth, async (req, res) => {
@@ -69,6 +70,8 @@ router.post("/groups/:groupId/posts", requireAuth, async (req, res) => {
     });
 
     await group.save();
+    addPoints(req.user, 5, { reason: "Posted in a group" });
+    await req.user.save();
     return res.status(201).json({ message: "Post added", postsCount: group.posts.length });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -145,6 +148,8 @@ router.post("/polls/:pollId/vote", requireAuth, async (req, res) => {
     }
 
     await poll.save();
+    addPoints(req.user, 1, { reason: "Voted in a poll" });
+    await req.user.save();
     return res.json({ message: "Vote recorded", totals: countVotes(poll), votesCount: poll.votes.length });
   } catch (err) {
     return res.status(500).json({ error: err.message });

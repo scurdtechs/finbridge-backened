@@ -4,6 +4,7 @@ const router = express.Router();
 const { requireAuth } = require("../middleware/auth");
 const OfflineMessage = require("../models/offlinemessage");
 const User = require("../models/user");
+const { addPoints } = require("../utils/gamification");
 
 // ================= OFFLINE CHAT =================
 router.post("/offline/chat/send", requireAuth, async (req, res) => {
@@ -17,6 +18,9 @@ router.post("/offline/chat/send", requireAuth, async (req, res) => {
       content: String(content).trim(),
       read: false,
     });
+
+    addPoints(req.user, 1, { reason: "Sent offline chat message" });
+    await req.user.save();
 
     return res.status(201).json({ message: "Sent", msg: message });
   } catch (err) {
@@ -61,6 +65,9 @@ router.post("/offline/files/share", requireAuth, async (req, res) => {
       uploadedAt: new Date(),
     });
     await borrower.save();
+
+    addPoints(req.user, 3, { reason: "Shared an offline file" });
+    await req.user.save();
 
     return res.status(201).json({ message: "File shared", borrowerOfflineFilesCount: borrower.offlineFiles.length });
   } catch (err) {

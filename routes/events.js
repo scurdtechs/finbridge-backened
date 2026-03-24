@@ -4,6 +4,7 @@ const router = express.Router();
 const { requireAuth, requireAdmin } = require("../middleware/auth");
 const Event = require("../models/event");
 const Transaction = require("../models/transaction");
+const { addPoints } = require("../utils/gamification");
 
 // ================= LIST EVENTS =================
 router.get("/events", requireAuth, async (req, res) => {
@@ -50,6 +51,8 @@ router.post("/events/:id/rsvp", requireAuth, async (req, res) => {
 
     event.attendees.push(req.user._id);
     await event.save();
+    addPoints(req.user, 5, { reason: `RSVP: ${event.title}` });
+    await req.user.save();
     return res.json({ message: "RSVP successful", event });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -92,6 +95,9 @@ router.post("/events/:id/ticket-pay", requireAuth, async (req, res) => {
       amount: fee,
       meta: { eventId: String(event._id) },
     });
+
+    addPoints(buyer, 20, { reason: "Paid event ticket" });
+    await buyer.save();
 
     return res.json({ message: "Ticket paid", event });
   } catch (err) {

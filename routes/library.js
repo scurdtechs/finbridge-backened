@@ -4,6 +4,7 @@ const router = express.Router();
 const { requireAuth, requireAdmin } = require("../middleware/auth");
 const User = require("../models/user");
 const LibraryMaterial = require("../models/librarymaterial");
+const { addPoints } = require("../utils/gamification");
 
 function normalizeText(s) {
   return String(s || "").trim();
@@ -52,6 +53,10 @@ router.post("/library/materials/:id/rate", requireAuth, async (req, res) => {
   else material.ratings.push({ userId: req.user._id, value: rating });
 
   await material.save();
+
+  addPoints(req.user, 2, { reason: "Rated library material" });
+  await req.user.save();
+
   return res.json({ message: "Rated", ratingsCount: material.ratings.length });
 });
 
@@ -73,6 +78,10 @@ router.post("/library/materials/:id/bookmark", requireAuth, async (req, res) => 
 
   user.libraryBookmarks.push(materialId);
   await user.save();
+
+  addPoints(user, 3, { reason: "Bookmarked library material", dailyTaskType: "bookmark_library" });
+  await user.save();
+
   return res.json({ message: "Bookmarked" });
 });
 

@@ -51,5 +51,65 @@ router.post("/admin/notifications/broadcast", requireAuth, requireAdmin, async (
   });
 });
 
+// ================= REPORT EXPORT (CSV) =================
+router.get("/admin/reports/export", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const resource = req.query.resource ? String(req.query.resource) : "loans";
+    if (!["loans", "librarymaterials"].includes(resource)) {
+      return res.status(400).json({ message: "Invalid resource" });
+    }
+
+    if (resource === "loans") {
+      const loans = await Loan.find({}).sort({ createdAt: -1 }).limit(500);
+      const header = ["loanId", "userId", "amount", "interest", "status", "totalToRepay", "dueDate", "createdAt"].join(",");
+      const rows = loans.map((l) =>
+        [
+          l._id,
+          l.userId,
+          l.amount,
+          l.interest,
+          l.status,
+          l.totalToRepay,
+          l.dueDate ? new Date(l.dueDate).toISOString() : "",
+          new Date(l.createdAt).toISOString(),
+        ]
+          .map((x) => String(x ?? "").replace(/,/g, " "))
+          .join(",")
+      );
+
+      const csv = [header, ...rows].join("\n");
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="finbridge-loans-report.csv"`);
+      return res.status(200).send(csv);
+    }
+
+    if (resource === "librarymaterials") {
+      const items = await LibraryMaterial.find({}).sort({ createdAt: -1 }).limit(500);
+      const header = ["materialId", "title", "subject", "category", "url", "offlineAvailable", "createdAt"].join(",");
+      const rows = items.map((m) =>
+        [
+          m._id,
+          m.title,
+          m.subject,
+          m.category,
+          m.url,
+          m.offlineAvailable,
+          new Date(m.createdAt).toISOString(),
+        ]
+          .map((x) => String(x ?? "").replace(/,/g, " "))
+          .join(",")
+      );
+
+      const csv = [header, ...rows].join("\n");
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="finbridge-library-report.csv"`);
+      return res.status(200).send(csv);
+    }
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
+
 
