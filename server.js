@@ -128,14 +128,11 @@ app.use((req, res) => {
   res.status(404).json({ message: "Not found" });
 });
 
-// Export a request handler for Vercel.
-module.exports = (req, res) => {
-  app(req, res);
-};
+// Vercel serverless export and local dev fallback
+module.exports = app;
 
-// Local dev fallback (optional)
 if (require.main === module) {
   const PORT = process.env.PORT || 3000;
-  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  app.listen(PORT, () => console.log(`FinBridge backend running on port ${PORT}`));
 }
 
