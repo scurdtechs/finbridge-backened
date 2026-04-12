@@ -50,6 +50,7 @@ const defaultAllowedOrigins = [
   "http://localhost:3000",
   "https://finbridge-fronted-6ru9.vercel.app",
   "https://finbridge-fronted-qi4n.vercel.app",
+  "https://finbridge-fronted-hzte.vercel.app",
 ];
 
 const allowedOrigins = process.env.CLIENT_ORIGINS
