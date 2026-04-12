@@ -4,30 +4,41 @@ const express = require("express");
 const cors = require("cors");
 const mongoose = require("mongoose");
 
-const usersRouter = require("./routes/user");
-const walletRouter = require("./routes/wallet");
-const loansRouter = require("./routes/loans");
-const studyRouter = require("./routes/study");
-const libraryRouter = require("./routes/library");
-const marketRouter = require("./routes/market");
-const finGramRouter = require("./routes/fingram");
-const eventsRouter = require("./routes/events");
-const healthRouter = require("./routes/health");
-const mentorshipRouter = require("./routes/mentorship");
-const groupsRouter = require("./routes/groups");
-const entertainmentRouter = require("./routes/entertainment");
-const volunteerRouter = require("./routes/volunteer");
-const techRouter = require("./routes/tech");
-const aiRouter = require("./routes/ai");
-const adminRouter = require("./routes/admin");
-const offlineRouter = require("./routes/offline");
-const smartStudyRouter = require("./routes/smartstudy");
-const campusRouter = require("./routes/campus");
-const skillsRouter = require("./routes/skills");
-const labsRouter = require("./routes/labs");
-const arvrRouter = require("./routes/arvr");
-const gamificationRouter = require("./routes/gamification");
-const notificationsRouter = require("./routes/notifications");
+// Load routes with error handling
+let usersRouter, walletRouter, loansRouter, studyRouter, libraryRouter, marketRouter;
+let finGramRouter, eventsRouter, healthRouter, mentorshipRouter, groupsRouter;
+let entertainmentRouter, volunteerRouter, techRouter, aiRouter, adminRouter;
+let offlineRouter, smartStudyRouter, campusRouter, skillsRouter, labsRouter;
+let arvrRouter, gamificationRouter, notificationsRouter;
+
+try {
+  usersRouter = require("./routes/user");
+  walletRouter = require("./routes/wallet");
+  loansRouter = require("./routes/loans");
+  studyRouter = require("./routes/study");
+  libraryRouter = require("./routes/library");
+  marketRouter = require("./routes/market");
+  finGramRouter = require("./routes/fingram");
+  eventsRouter = require("./routes/events");
+  healthRouter = require("./routes/health");
+  mentorshipRouter = require("./routes/mentorship");
+  groupsRouter = require("./routes/groups");
+  entertainmentRouter = require("./routes/entertainment");
+  volunteerRouter = require("./routes/volunteer");
+  techRouter = require("./routes/tech");
+  aiRouter = require("./routes/ai");
+  adminRouter = require("./routes/admin");
+  offlineRouter = require("./routes/offline");
+  smartStudyRouter = require("./routes/smartstudy");
+  campusRouter = require("./routes/campus");
+  skillsRouter = require("./routes/skills");
+  labsRouter = require("./routes/labs");
+  arvrRouter = require("./routes/arvr");
+  gamificationRouter = require("./routes/gamification");
+  notificationsRouter = require("./routes/notifications");
+} catch (error) {
+  console.error("Error loading routes:", error.message);
+}
 
 const app = express();
 app.disable("x-powered-by");
@@ -90,6 +101,7 @@ app.use(async (req, res, next) => {
     await ensureMongoConnected();
     return next();
   } catch (err) {
+    console.error("Database connection error:", err.message);
     return res.status(500).json({ message: "Database connection failed", error: err.message });
   }
 });
@@ -99,30 +111,31 @@ app.get("/api/health", (req, res) => res.json({ status: "ok" }));
 // Handle favicon requests
 app.get("/favicon.ico", (req, res) => res.status(204).end());
 
-app.use("/api", usersRouter);
-app.use("/api", walletRouter);
-app.use("/api", loansRouter);
-app.use("/api", studyRouter);
-app.use("/api", libraryRouter);
-app.use("/api", marketRouter);
-app.use("/api", finGramRouter);
-app.use("/api", eventsRouter);
-app.use("/api", healthRouter);
-app.use("/api", mentorshipRouter);
-app.use("/api", groupsRouter);
-app.use("/api", entertainmentRouter);
-app.use("/api", volunteerRouter);
-app.use("/api", techRouter);
-app.use("/api", aiRouter);
-app.use("/api", adminRouter);
-app.use("/api", offlineRouter);
-app.use("/api", smartStudyRouter);
-app.use("/api", campusRouter);
-app.use("/api", skillsRouter);
-app.use("/api", labsRouter);
-app.use("/api", arvrRouter);
-app.use("/api", notificationsRouter);
-app.use("/api", gamificationRouter);
+// Only use routes that loaded successfully
+if (usersRouter) app.use("/api", usersRouter);
+if (walletRouter) app.use("/api", walletRouter);
+if (loansRouter) app.use("/api", loansRouter);
+if (studyRouter) app.use("/api", studyRouter);
+if (libraryRouter) app.use("/api", libraryRouter);
+if (marketRouter) app.use("/api", marketRouter);
+if (finGramRouter) app.use("/api", finGramRouter);
+if (eventsRouter) app.use("/api", eventsRouter);
+if (healthRouter) app.use("/api", healthRouter);
+if (mentorshipRouter) app.use("/api", mentorshipRouter);
+if (groupsRouter) app.use("/api", groupsRouter);
+if (entertainmentRouter) app.use("/api", entertainmentRouter);
+if (volunteerRouter) app.use("/api", volunteerRouter);
+if (techRouter) app.use("/api", techRouter);
+if (aiRouter) app.use("/api", aiRouter);
+if (adminRouter) app.use("/api", adminRouter);
+if (offlineRouter) app.use("/api", offlineRouter);
+if (smartStudyRouter) app.use("/api", smartStudyRouter);
+if (campusRouter) app.use("/api", campusRouter);
+if (skillsRouter) app.use("/api", skillsRouter);
+if (labsRouter) app.use("/api", labsRouter);
+if (arvrRouter) app.use("/api", arvrRouter);
+if (notificationsRouter) app.use("/api", notificationsRouter);
+if (gamificationRouter) app.use("/api", gamificationRouter);
 
 app.use((req, res) => {
   res.status(404).json({ message: "Not found" });
